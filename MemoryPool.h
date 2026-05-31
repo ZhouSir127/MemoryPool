@@ -62,7 +62,7 @@ class MemoryPool
       }
     }
 
-    T* allocate(size_t n = 1, const T* hint = 0)
+    T* allocate(size_t n = 1)
     {
       if (n > 1)
           return static_cast<T*>(::operator new(n * sizeof(T)));
@@ -95,6 +95,27 @@ class MemoryPool
       freeSlots_ = reinterpret_cast<Slot_*>(p); 
     }
 
+        bool operator==(const MemoryPool& b) const noexcept 
+    {
+        return this == &b;
+    }
+
+    bool operator!=(const MemoryPool& b) const noexcept 
+    {
+        return !this->operator==(b); 
+    }
+
+    template <typename U, size_t B2>
+    bool operator==(const MemoryPool<U, B2>& b) const noexcept 
+    {
+        return false;
+    }
+    template <typename U, size_t B2>
+    bool operator!=(const MemoryPool<U, B2>& b) const noexcept 
+    {
+        return true; 
+    }
+
   private:
     union Slot_ {
       T element;
@@ -123,30 +144,6 @@ class MemoryPool
     }
 
     static_assert(BlockSize >= sizeof(Dummy) + alignof(Slot_) - 1 + sizeof(Slot_), "BlockSize too small.");
-
-    // 声明友元，用于 operator== 中的状态比对
-    template <typename U, size_t B> friend class MemoryPool;
-
-    bool operator==(const MemoryPool& b) const noexcept 
-    {
-        return this == &b;
-    }
-
-    bool operator!=(const MemoryPool& b) const noexcept 
-    {
-        return !this->operator==(b); 
-    }
-
-    template <typename U, size_t B2>
-    bool operator==(const MemoryPool<U, B2>& b) const noexcept 
-    {
-        return false;
-    }
-    template <typename U, size_t B2>
-    bool operator!=(const MemoryPool<U, B2>& b) const noexcept 
-    {
-        return true; 
-    }
 };
 
 
