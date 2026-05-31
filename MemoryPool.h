@@ -38,10 +38,13 @@ class MemoryPool
 
     MemoryPool() noexcept : currentBlock_(nullptr), currentSlot_(nullptr), lastSlot_(nullptr), freeSlots_(nullptr) 
     {}
-    
     MemoryPool(const MemoryPool& memoryPool) noexcept : MemoryPool() 
     {}
     
+    template <class U> 
+    MemoryPool(const MemoryPool<U, BlockSize>& memoryPool) noexcept : MemoryPool() 
+    {}
+
     MemoryPool(MemoryPool&& memoryPool) noexcept
     {
         currentBlock_ = std::exchange(memoryPool.currentBlock_, nullptr);
@@ -50,22 +53,16 @@ class MemoryPool
         freeSlots_ = std::exchange(memoryPool.freeSlots_,nullptr);
     }
     
-    // 异型拷贝构造：由于 T 和 U 大小不同，切片池无法通用，只能新建池子
-    template <class U> 
-    MemoryPool(const MemoryPool<U, BlockSize>& memoryPool) noexcept : MemoryPool() 
-    {}
-
     ~MemoryPool() noexcept
     { 
       while (currentBlock_){
-        Dummy* death = currentBlock_; // 此处类型已修正为 Dummy* 以匹配 currentBlock_
+        Dummy* death = currentBlock_;
         currentBlock_ = currentBlock_->next;
         ::operator delete(reinterpret_cast<void*>(death) );
       }
     }
 
-    /* 3. 核心分配接口：只做物理内存买卖 */
-    inline T* allocate(size_t n = 1, const T* hint = 0)
+    T* allocate(size_t n = 1, const T* hint = 0)
     {
       if (n > 1)
           return static_cast<T*>(::operator new(n * sizeof(T)));
@@ -84,7 +81,7 @@ class MemoryPool
       return result;
     }
 
-    inline void deallocate(T* p, size_t n = 1)
+    void deallocate(T* p, size_t n = 1)
     {
       if (p == nullptr) 
         return;
@@ -98,18 +95,14 @@ class MemoryPool
       freeSlots_ = reinterpret_cast<Slot_*>(p); 
     }
 
-    // 剔除了原版的 construct, destroy, address, max_size, newElement, deleteElement
-    // 全权交由 std::allocator_traits 兜底！
-
   private:
-    // 空间复用黑魔法 (Union)
     union Slot_ {
       T element;
       Slot_* next;
     };
 
     using Dummy = struct Dummy{
-      struct Dummy* next;
+      struct Dummy* next = nullptr;
     };
 
     Dummy* currentBlock_;
@@ -123,35 +116,38 @@ class MemoryPool
       dummy->next = currentBlock_;
       currentBlock_ = dummy;
 
-      char* newBlock = reinterpret_cast<char*>(dummy);
-      char* body = newBlock + sizeof(Dummy);
+      char*newBlock = reinterpret_cast<char*>(dummy),*body = newBlock + sizeof(Dummy);
 
       currentSlot_ = reinterpret_cast<Slot_*>(body + (alignof(Slot_)-reinterpret_cast<uintptr_t>(body) )%alignof(Slot_) );
       lastSlot_ = reinterpret_cast<Slot_*>(newBlock + BlockSize);
     }
 
-    static_assert(BlockSize >= 2 * sizeof(Slot_), "BlockSize too small.");
+    static_assert(BlockSize >= sizeof(Dummy) + alignof(Slot_) - 1 + sizeof(Slot_), "BlockSize too small.");
 
     // 声明友元，用于 operator== 中的状态比对
     template <typename U, size_t B> friend class MemoryPool;
+
+    bool operator==(const MemoryPool& b) const noexcept 
+    {
+        return this == &b;
+    }
+
+    bool operator!=(const MemoryPool& b) const noexcept 
+    {
+        return !this->operator==(b); 
+    }
+
+    template <typename U, size_t B2>
+    bool operator==(const MemoryPool<U, B2>& b) const noexcept 
+    {
+        return false;
+    }
+    template <typename U, size_t B2>
+    bool operator!=(const MemoryPool<U, B2>& b) const noexcept 
+    {
+        return true; 
+    }
 };
 
-/* 4. 生死攸关的等价性判断 (必须在全局作用域) */
-// 同类型 T 的分配器，只有底层物理指针完全一致，才算等价
-template <typename T, size_t B>
-inline bool operator==(const MemoryPool<T, B>& a, const MemoryPool<T, B>& b) noexcept {
-    return &a == &b; // 极其严格的实例比对：不是同一个对象，就绝不能互相释放！
-}
-
-// 异型分配器 (T != U) 永远不等价，因为切片大小不同
-template <typename T, size_t B1, typename U, size_t B2>
-inline bool operator==(const MemoryPool<T, B1>& a, const MemoryPool<U, B2>& b) noexcept {
-    return false; 
-}
-
-template <typename T, size_t B1, typename U, size_t B2>
-inline bool operator!=(const MemoryPool<T, B1>& a, const MemoryPool<U, B2>& b) noexcept {
-    return !(a == b);
-}
 
 #endif
