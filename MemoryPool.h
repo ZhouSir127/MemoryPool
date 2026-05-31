@@ -33,7 +33,7 @@ class MemoryPool
     using propagate_on_container_swap = std::true_type;
 
     template <typename U> struct rebind {
-      using other = MemoryPool<U, BlockSize>;
+      using other = MemoryPool<U>;
     };
 
     MemoryPool() noexcept : currentBlock_(nullptr), currentSlot_(nullptr), lastSlot_(nullptr), freeSlots_(nullptr) 
@@ -42,7 +42,7 @@ class MemoryPool
     {}
     
     template <class U> 
-    MemoryPool(const MemoryPool<U, BlockSize>& memoryPool) noexcept : MemoryPool() 
+    MemoryPool(const MemoryPool<U>& memoryPool) noexcept : MemoryPool() 
     {}
 
     MemoryPool(MemoryPool&& memoryPool) noexcept
