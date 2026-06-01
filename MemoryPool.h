@@ -18,7 +18,6 @@ class MemoryPool
     MemoryPool& operator=(const MemoryPool& memoryPool) = delete;
     MemoryPool(const MemoryPool& memoryPool) noexcept : MemoryPool(){}
 
-
     using propagate_on_container_move_assignment = std::true_type;
     MemoryPool& operator=(MemoryPool&& memoryPool) noexcept
     {
@@ -32,11 +31,10 @@ class MemoryPool
       return *this; 
     }
     
-    
     using propagate_on_container_swap = std::true_type;
 
     template <typename U> struct rebind {
-      using other = MemoryPool<U>;
+      using other = MemoryPool<U,BlockSize>;
     };
 
     MemoryPool() noexcept : currentBlock_(nullptr), currentSlot_(nullptr), lastSlot_(nullptr), freeSlots_(nullptr) 

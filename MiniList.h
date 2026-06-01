@@ -22,6 +22,8 @@ private:
     NodeAllocator alloc_;
 
 public:
+    using value_type = typename Alloc::value_type;
+
     void clear(){
         while (head_) {
             Node* next = head_->next;
@@ -59,10 +61,10 @@ public:
             return *this;
 
         if constexpr (NodeAllocator::propagate_on_container_copy_assignment::value){
-            if(alloc_ != other.alloc_){
+            if(alloc_ != other.alloc_)
                 clear(); 
-                alloc_ = other.alloc_;
-            }
+                    
+            alloc_ = other.alloc_;
         //想实现alloc_作为别名引用other.alloc_，但C++不允许，所以只能在这里重新赋值
         //但是浅拷贝会导致两个对象的alloc_指向同一块内存，内存践踏且析构时会重复释放同一块内存，造成错误，所以有状态的分配器必须禁止拷贝赋值
         }
@@ -118,8 +120,44 @@ public:
             if (alloc_ == other.alloc_) {
                 clear();
                 head_ = std::exchange(other.head_, nullptr);
-            } else
-                operator=(other); 
+            }else{
+                Node* curr = head_;
+                Node* p = other.head_;
+                Node* end = head_; 
+                //可以复用的前提是旧内存未被deallocate
+                while (p && curr){
+                    curr->data = std::move(p->data); 
+                    end = curr;
+                    curr = curr->next;
+                    p = p->next;
+                }
+                
+                if (p) {
+                    do {
+                        Node* raw = alloc_.allocate(1);
+                        ::new (static_cast<void*>(raw)) Node(nullptr, std::move(p->data));
+
+                        if(end)
+                            end = end->next = raw; 
+                        else
+                            end = head_ = raw; 
+                        
+                        p = p->next;
+                    }while(p);
+                }else if (curr) {
+                    if(end != curr)
+                        end->next = nullptr; 
+                    else
+                        head_ = nullptr; 
+
+                    do{
+                        Node* next = curr->next;
+                        curr->~Node();
+                        alloc_.deallocate(curr, 1);
+                        curr = next;
+                    }while(curr);
+                }
+            }
         }
         return *this;
     }
